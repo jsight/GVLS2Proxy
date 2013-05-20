@@ -42,6 +42,7 @@ public class ProxyServlet extends HttpServlet {
             resp.setContentType("text/plain");
             resp.sendError(503);
             resp.getWriter().write("Request already in progress!");
+            return;
         }
         
         requestIsRunning = true;
@@ -125,13 +126,17 @@ public class ProxyServlet extends HttpServlet {
 
             // 4. Grab MPEG-TS
             // /cgi-bin/movie_sp.cgi
-            httpGet = new HttpGet("http://" + ip + "/cgi-bin/movie_sp.cgi");
-            response = httpClient.execute(httpGet);
-            System.out.println("Headers from video stream response:");
-            printHeaders(response);
-            is = response.getEntity().getContent();
-            writeStreamToOutput(is, resp.getOutputStream());
-            System.out.println("MPEG-TS stream complete!");
+            try {
+                httpGet = new HttpGet("http://" + ip + "/cgi-bin/movie_sp.cgi");
+                response = httpClient.execute(httpGet);
+                System.out.println("Headers from video stream response:");
+                printHeaders(response);
+                is = response.getEntity().getContent();
+                writeStreamToOutput(is, resp.getOutputStream());
+                System.out.println("MPEG-TS stream complete!");
+            } catch (Exception e) {
+                System.out.println("Error transferring stream... shutting down thread!");
+            }
 
             // 5. Disconnect session
             httpGet = new HttpGet("http://" + ip + "/php/session_finish.php");
