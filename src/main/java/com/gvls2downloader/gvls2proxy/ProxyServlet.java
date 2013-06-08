@@ -27,12 +27,23 @@ import org.apache.http.impl.conn.PoolingClientConnectionManager;
 /**
  *
  */
-@WebServlet(name = "ProxyServlet", urlPatterns = {"/ProxyServlet"})
+@WebServlet(name = "ProxyServlet", urlPatterns = {"/ProxyServlet"}, loadOnStartup=1)
 public class ProxyServlet extends HttpServlet {
     private static final String KEY_IP = "ip";
     private static final String KEY_USER = "user";
     private static final String KEY_PASSWORD = "password";
 
+    @Override
+    public void init() throws ServletException {
+        System.out.println("-----------------------------------------------");
+        System.out.println("-----------------------------------------------");
+        System.out.println("---                                         ---");
+        System.out.println("---       GV LS2 Proxy Started!!!!          ---");
+        System.out.println("---                                         ---");
+        System.out.println("-----------------------------------------------");
+        System.out.println("-----------------------------------------------");
+    }
+    
     protected void processRequest(final HttpServletRequest req, final HttpServletResponse resp)
             throws ServletException, IOException {
         
