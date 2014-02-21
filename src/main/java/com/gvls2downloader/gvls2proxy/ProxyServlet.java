@@ -1,47 +1,35 @@
 package com.gvls2downloader.gvls2proxy;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+
 import javax.servlet.ServletException;
-import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.apache.http.Header;
-import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.conn.ClientConnectionManager;
-import org.apache.http.conn.scheme.PlainSocketFactory;
-import org.apache.http.conn.scheme.Scheme;
-import org.apache.http.conn.scheme.SchemeRegistry;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.impl.conn.PoolingClientConnectionManager;
 
-/**
- *
- */
-@WebServlet(name = "ProxyServlet", urlPatterns = {"/ProxyServlet"}, loadOnStartup=1)
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ProxyServlet extends HttpServlet {
-    private static final String KEY_IP = "ip";
+	private static final long serialVersionUID = 1L;
+	
+	private static final String KEY_IP = "ip";
+	private static final String KEY_PORT = "port";
     private static final String KEY_USER = "user";
     private static final String KEY_PASSWORD = "password";
+    private static final String KEY_BASE_PATH = "basePath";
 
+    private static final Logger log = LoggerFactory.getLogger(ProxyServlet.class);
+    
     @Override
     public void init() throws ServletException {
-        System.out.println("-----------------------------------------------");
-        System.out.println("-----------------------------------------------");
-        System.out.println("---                                         ---");
-        System.out.println("---       GV LS2 Proxy Started!!!!          ---");
-        System.out.println("---                                         ---");
-        System.out.println("-----------------------------------------------");
-        System.out.println("-----------------------------------------------");
+        log.info("-----------------------------------------------");
+        log.info("-----------------------------------------------");
+        log.info("---                                         ---");
+        log.info("---       GV LS2 Proxy Started!!!!          ---");
+        log.info("---                                         ---");
+        log.info("-----------------------------------------------");
+        log.info("-----------------------------------------------");
     }
     
     protected void processRequest(final HttpServletRequest req, final HttpServletResponse resp)
@@ -69,7 +57,7 @@ public class ProxyServlet extends HttpServlet {
         synchronized (dataLoader) {
             String ipParam = req.getParameter(KEY_IP);
             if (ipParam == null || ipParam.trim().equals("")) {
-                ipParam = "192.168.8.156";
+                ipParam = "localhost";
             }
             final String ip = ipParam;
 
@@ -96,7 +84,6 @@ public class ProxyServlet extends HttpServlet {
         }
     }
 
-    // <editor-fold defaultstate="collapsed" desc="HttpServlet methods. Click on the + sign on the left to edit the code.">
     /**
      * Handles the HTTP
      * <code>GET</code> method.
@@ -126,14 +113,4 @@ public class ProxyServlet extends HttpServlet {
             throws ServletException, IOException {
         processRequest(request, response);
     }
-
-    /**
-     * Returns a short description of the servlet.
-     *
-     * @return a String containing servlet description
-     */
-    @Override
-    public String getServletInfo() {
-        return "Short description";
-    }// </editor-fold>
 }
