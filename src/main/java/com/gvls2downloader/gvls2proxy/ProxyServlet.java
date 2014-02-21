@@ -35,9 +35,11 @@ public class ProxyServlet extends HttpServlet {
     protected void processRequest(final HttpServletRequest req, final HttpServletResponse resp)
             throws ServletException, IOException {
         
+    	final RequestInfo requestInfo = getRequestInfo(req);
+    	log.info("Received request for the following stream: " + requestInfo + " from: " + req.getRemoteAddr());
+    	
         final Boolean[] isRunning = new Boolean[] { true };
-        
-        final DataLoader dataLoader = DataLoader.getInstance();
+        final DataLoader dataLoader = DataLoader.getInstance(requestInfo, true);
         
         resp.setContentType("video/mpeg");
         final IDataLoaderCallback callback = new IDataLoaderCallback() {
@@ -47,35 +49,14 @@ public class ProxyServlet extends HttpServlet {
                     resp.getOutputStream().write(bytes);
                 } catch (Throwable e) {
                     isRunning[0] = false;
-                } finally {
-                    dataLoader.removeCallback(this);
                 }
             }
         };
         dataLoader.addCallback(callback);
         
-        synchronized (dataLoader) {
-            String ipParam = req.getParameter(KEY_IP);
-            if (ipParam == null || ipParam.trim().equals("")) {
-                ipParam = "localhost";
-            }
-            final String ip = ipParam;
-
-            String user = req.getParameter(KEY_USER);
-            String pw = req.getParameter(KEY_PASSWORD);
-
-            if (user == null || user.trim().equals("")) {
-                user = "camuser";
-            }
-            if (pw == null || pw.trim().equals("")) {
-                pw = "password";
-            }
-            dataLoader.init(ip, user, pw);
-        }
-        
         while (isRunning[0]) {
             try {
-                Thread.sleep(1000L);
+                Thread.sleep(50L);
             } catch (Exception e) {
                 isRunning[0] = false;
                 dataLoader.removeCallback(callback);
@@ -84,6 +65,46 @@ public class ProxyServlet extends HttpServlet {
         }
     }
 
+    private RequestInfo getRequestInfo(HttpServletRequest req) {
+        String ipParam = req.getParameter(KEY_IP);
+        if (ipParam == null || ipParam.trim().equals("")) {
+            ipParam = "localhost";
+        }
+        final String ip = ipParam;
+
+        String user = req.getParameter(KEY_USER);
+        String pw = req.getParameter(KEY_PASSWORD);
+
+        if (user == null || user.trim().equals("")) {
+            user = "camuser";
+        }
+        if (pw == null || pw.trim().equals("")) {
+            pw = "password";
+        }
+        
+        String portStr = req.getParameter(KEY_PORT);
+        int port;
+        if (portStr != null && !portStr.trim().equals("")) {
+        	port = Integer.parseInt(portStr);
+        } else {
+        	port = 80;
+        }
+        
+        String basePath = req.getParameter(KEY_BASE_PATH);
+        if (basePath == null || basePath.trim().equals("")) {
+        	basePath = "/";
+        } else if (!basePath.startsWith("/")) {
+        	basePath = "/" + basePath;
+        }
+        
+        RequestInfo requestInfo = new RequestInfo();
+        requestInfo.setIp(ip);
+        requestInfo.setPort(port);
+        requestInfo.setUserID(user);
+        requestInfo.setPassword(pw);
+        return requestInfo;
+    }
+    
     /**
      * Handles the HTTP
      * <code>GET</code> method.

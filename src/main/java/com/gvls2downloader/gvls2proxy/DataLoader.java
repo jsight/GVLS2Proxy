@@ -8,7 +8,10 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
@@ -22,39 +25,56 @@ import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
+ *
+ * Class responsible for connecting to the camera, as well as
+ * maintaining the persistent connection (including retries
+ * on connection failure).
  *
  * @author jsightler
  */
 public class DataLoader {
-
-    private static final DataLoader instance = new DataLoader();
+	private static Logger log = LoggerFactory.getLogger(DataLoader.class);
+	
+    private static Map<RequestInfo, DataLoader> dataLoaders = new HashMap<>();
+    
     private DataLoaderThread dataLoaderThread;
-    private boolean started;
-    private String ip;
-    private String user;
-    private String password;
-    private List<IDataLoaderCallback> dataLoaderCallbacks = new ArrayList<IDataLoaderCallback>();
+    /**
+     * Used to store details for connecting to the camera (ip, user, pw, etc)
+     */
+    private RequestInfo requestInfo;
+    /**
+     * List of callbacks to notify on each received batch of data
+     */
+    private List<IDataLoaderCallback> dataLoaderCallbacks = new ArrayList<>();
+    /**
+     * File used for local storage of streaming data
+     */
     private File streamingOutputFile;
     
-    public static DataLoader getInstance() {
-        return instance;
+    public static synchronized DataLoader getInstance(RequestInfo requestInfo, boolean autoStart) {
+        DataLoader loader = dataLoaders.get(requestInfo);
+        if (loader == null && autoStart) {
+        	loader = new DataLoader();
+        	loader.init(requestInfo);
+        	dataLoaders.put(requestInfo, loader);
+        }
+        return loader;
     }
 
     private DataLoader() {
-        dataLoaderThread = new DataLoaderThread();
     }
 
     public boolean isStarted() {
-        return started;
+        return dataLoaderThread != null;
     }
 
-    public void init(String ip, String user, String password) {
-        this.ip = ip;
-        this.user = user;
-        this.password = password;
-        started = true;
+    public void init(RequestInfo requestInfo) {
+    	dataLoaderThread = new DataLoaderThread();
+        this.requestInfo = requestInfo;
         initStreamingFilename();
         dataLoaderThread.start();
     }
@@ -67,10 +87,10 @@ public class DataLoader {
             streamingFolder.mkdirs();
         }
         
-        final DateFormat df = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        final DateFormat df = new SimpleDateFormat("yyyy_MM_dd_HHmmss");
         String dateStr = df.format(new Date());
         this.streamingOutputFile = new File(streamingFolder, "mpegstream_" + dateStr + ".ts");
-        System.out.println("Filename is: " + streamingOutputFile.getAbsolutePath());
+        log.info("Filename is: " + streamingOutputFile.getAbsolutePath() + " (for stream request: " + requestInfo + ")");
     }
     
     public synchronized void addCallback(IDataLoaderCallback callback) {
@@ -148,7 +168,6 @@ public class DataLoader {
                 httpGet = new HttpGet("http://" + ip + "/cgi-bin/movie_sp.cgi");
                 response = httpClient.execute(httpGet);
                 System.out.println("Headers from video stream response:");
-                printHeaders(response);
                 is = response.getEntity().getContent();
                 writeStreamToOutput(is);
                 System.out.println("MPEG-TS stream complete!");
@@ -160,7 +179,6 @@ public class DataLoader {
             httpGet = new HttpGet("http://" + ip + "/php/session_finish.php");
             response = httpClient.execute(httpGet);
             System.out.println("Headers from Session completion:");
-            printHeaders(response);
             is = response.getEntity().getContent();
             writeStreamToFile(is, "session_complete.txt");
         } finally {
@@ -171,35 +189,31 @@ public class DataLoader {
     private class DataLoaderThread extends Thread {
         public void run() {
             while (true) {
+            	// first, attempt to make the request
                 try {
                     executeRequest();
-                    System.out.println("Request Complete... restarting in 5 seconds (" + new Date() + ")");
-                    try {
-                        Thread.sleep(5000);
-                    } catch (Throwable e) {
-                        // ignore for now
-                    }
                 } catch (Throwable t) {
-                    System.out.println("Request failed due to: " + t.getMessage());
-                    System.out.println("Pausing for 30 seconds, and then will retry (" + new Date() + ")");
-                    try {
-                        Thread.sleep(31000);
-                    } catch (Throwable e) {
-                        // ignore for now
-                    }
+                	log.debug("Camera connection failure", t);
+                }
+                
+                // If we have reached here, the connection has failed.
+                //
+                // This could be due to a network error or an authentication failure.
+                //
+                // In either case, the camera frequently will prevent connections in
+                // less than 30 seconds (to prevent two connections from occurring at
+                // the same time), so wait 31 seconds and try again.
+                Date retryTime = new Date(System.currentTimeMillis() + (1000L * 31L));
+                log.error("Request failed. Waiting for 31 seconds, and then will retry at: " + retryTime);
+                try {
+                    Thread.sleep(31000);
+                } catch (Exception e) {
+                    // ignore for now
                 }
             }
         }
     }
 
-    private static void printHeaders(HttpResponse response) {
-        for (Header header : response.getAllHeaders()) {
-            System.out.println("Header: " + header.getName() + ": " + header.getValue());
-        }
-        System.out.println();
-        System.out.println();
-    }
-    
     private void writeStreamToOutput(InputStream is) throws IOException {
         FileOutputStream fos = new FileOutputStream(this.streamingOutputFile, true);
         try {
@@ -222,7 +236,7 @@ public class DataLoader {
     
     private static void writeStreamToFile(InputStream is, String filename) throws IOException {
         File file = new File(filename);
-        System.out.println("Writing to: " + file.getAbsolutePath());
+        log.info("Writing data to: " + file.getAbsolutePath());
         FileOutputStream fos = new FileOutputStream(file);
         byte[] buffer = new byte[32768];
 
