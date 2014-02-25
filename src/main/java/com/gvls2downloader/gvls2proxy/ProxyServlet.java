@@ -35,7 +35,7 @@ public class ProxyServlet extends HttpServlet {
     protected void processRequest(final HttpServletRequest req, final HttpServletResponse resp)
             throws ServletException, IOException {
         
-    	final RequestInfo requestInfo = getRequestInfo(req);
+    	final CameraConfiguration requestInfo = getRequestInfo(req);
     	log.info("Received request for the following stream: " + requestInfo + " from: " + req.getRemoteAddr());
     	
         final Boolean[] isRunning = new Boolean[] { true };
@@ -65,7 +65,7 @@ public class ProxyServlet extends HttpServlet {
         }
     }
 
-    private RequestInfo getRequestInfo(HttpServletRequest req) {
+    private CameraConfiguration getRequestInfo(HttpServletRequest req) {
         String ipParam = req.getParameter(KEY_IP);
         if (ipParam == null || ipParam.trim().equals("")) {
             ipParam = "localhost";
@@ -95,9 +95,11 @@ public class ProxyServlet extends HttpServlet {
         	basePath = "/";
         } else if (!basePath.startsWith("/")) {
         	basePath = "/" + basePath;
+        } else if (!basePath.endsWith("/")) {
+        	basePath = basePath + "/";
         }
         
-        RequestInfo requestInfo = new RequestInfo();
+        CameraConfiguration requestInfo = new CameraConfiguration();
         requestInfo.setIp(ip);
         requestInfo.setPort(port);
         requestInfo.setUserID(user);

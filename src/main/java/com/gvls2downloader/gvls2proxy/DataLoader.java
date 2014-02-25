@@ -39,13 +39,13 @@ import org.slf4j.LoggerFactory;
 public class DataLoader {
 	private static Logger log = LoggerFactory.getLogger(DataLoader.class);
 	
-    private static Map<RequestInfo, DataLoader> dataLoaders = new HashMap<>();
+    private static Map<CameraConfiguration, DataLoader> dataLoaders = new HashMap<>();
     
     private DataLoaderThread dataLoaderThread;
     /**
      * Used to store details for connecting to the camera (ip, user, pw, etc)
      */
-    private RequestInfo requestInfo;
+    private CameraConfiguration requestInfo;
     /**
      * List of callbacks to notify on each received batch of data
      */
@@ -55,7 +55,7 @@ public class DataLoader {
      */
     private File streamingOutputFile;
     
-    public static synchronized DataLoader getInstance(RequestInfo requestInfo, boolean autoStart) {
+    public static synchronized DataLoader getInstance(CameraConfiguration requestInfo, boolean autoStart) {
         DataLoader loader = dataLoaders.get(requestInfo);
         if (loader == null && autoStart) {
         	loader = new DataLoader();
@@ -72,7 +72,7 @@ public class DataLoader {
         return dataLoaderThread != null;
     }
 
-    public void init(RequestInfo requestInfo) {
+    public void init(CameraConfiguration requestInfo) {
     	dataLoaderThread = new DataLoaderThread();
         this.requestInfo = requestInfo;
         initStreamingFilename();
@@ -109,32 +109,32 @@ public class DataLoader {
             ClientConnectionManager cm = new PoolingClientConnectionManager(schemeRegistry);
 
             final DefaultHttpClient httpClient = new DefaultHttpClient(cm);
-            UsernamePasswordCredentials creds = new UsernamePasswordCredentials(this.user, this.password);
+            
+            final String user = this.requestInfo.getUserID();
+            final String password = this.requestInfo.getPassword();
+            final String hostAndPort = requestInfo.getIp() + ":" + requestInfo.getPort();
+            final String basePath = requestInfo.getBasePath();
+            
+            UsernamePasswordCredentials creds = new UsernamePasswordCredentials(user, password);
             httpClient.getCredentialsProvider().setCredentials(AuthScope.ANY, creds);
 
             // 1. Authenticate
-            HttpGet httpGet = new HttpGet("http://" + this.ip + "/php/session_start_user.php");
+            HttpGet httpGet = new HttpGet("http://" + hostAndPort + basePath + "php/session_start_user.php");
             HttpResponse response = httpClient.execute(httpGet);
-            //System.out.println("Headers from auth response:");
-            //printHeaders(response);
             InputStream is = response.getEntity().getContent();
             writeStreamToFile(is, "authentication.txt");
 
             // 2. Send Hello
-            httpGet = new HttpGet("http://" + ip + "/cgi-bin/hello.cgi");
+            httpGet = new HttpGet("http://" + hostAndPort + basePath + "cgi-bin/hello.cgi");
             response = httpClient.execute(httpGet);
-            //System.out.println("Headers from hello response:");
-            //printHeaders(response);
             is = response.getEntity().getContent();
             writeStreamToFile(is, "hello.txt");
 
             // 3. Send first command
-            HttpPost httpPost = new HttpPost("http://" + ip + "/cgi-bin/cmd.cgi");
+            HttpPost httpPost = new HttpPost("http://" + hostAndPort + basePath + "cgi-bin/cmd.cgi");
             StringEntity stringEntity = new StringEntity("\"Command\":\"SetCamCtrl\",\"Params\":{\"Ctrl\":\"ModeMonitor\"}}");
             httpPost.setEntity(null);
             response = httpClient.execute(httpPost);
-            //System.out.println("Headers from cmd response:");
-            //printHeaders(response);
             is = response.getEntity().getContent();
             writeStreamToFile(is, "cmd.txt");
 
@@ -143,10 +143,9 @@ public class DataLoader {
                 public void run() {
                     while (isRunning[0]) {
                         try {
-                            HttpGet httpGet = new HttpGet("http://" + ip + "/php/session_continue.php");
+                            HttpGet httpGet = new HttpGet("http://" + hostAndPort + basePath + "php/session_continue.php");
                             HttpResponse response = httpClient.execute(httpGet);
-                            System.out.println("Headers from session continuation:");
-                            printHeaders(response);
+                            log.info("Headers from session continuation:");
                             InputStream is = response.getEntity().getContent();
                             writeStreamToFile(is, "session_continue.txt");
                         } catch (Throwable t) {
@@ -165,20 +164,17 @@ public class DataLoader {
             // 4. Grab MPEG-TS
             // /cgi-bin/movie_sp.cgi
             try {
-                httpGet = new HttpGet("http://" + ip + "/cgi-bin/movie_sp.cgi");
+                httpGet = new HttpGet("http://" + hostAndPort + basePath + "cgi-bin/movie_sp.cgi");
                 response = httpClient.execute(httpGet);
-                System.out.println("Headers from video stream response:");
                 is = response.getEntity().getContent();
                 writeStreamToOutput(is);
-                System.out.println("MPEG-TS stream complete!");
             } catch (Exception e) {
-                System.out.println("Error transferring stream... shutting down thread!");
+                log.info("Error transferring stream... shutting down thread!");
             }
 
             // 5. Disconnect session
-            httpGet = new HttpGet("http://" + ip + "/php/session_finish.php");
+            httpGet = new HttpGet("http://" + hostAndPort + basePath + "php/session_finish.php");
             response = httpClient.execute(httpGet);
-            System.out.println("Headers from Session completion:");
             is = response.getEntity().getContent();
             writeStreamToFile(is, "session_complete.txt");
         } finally {

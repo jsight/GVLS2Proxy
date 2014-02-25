@@ -4,25 +4,23 @@ package com.gvls2downloader.gvls2proxy;
  * Contains info regarding a connection to a specific camera (or camera simulator).
  * 
  */
-public class RequestInfo {
+public class CameraConfiguration {
 	private String ip;
 	private int port = 80;
 	private String userID;
 	private String password;
 	private String basePath = "/";
 
-	public RequestInfo() {
+	public CameraConfiguration() {
 	}
 	
-	public RequestInfo(String ip, int port, String basePath, String userID, String password) {
+	public CameraConfiguration(String ip, int port, String basePath, String userID, String password) {
 		this.ip = ip;
 		this.port = port;
 		this.userID = userID;
 		this.password = password;
 		this.basePath = basePath;
 	}
-
-
 
 	public String getIp() {
 		return ip;
@@ -88,7 +86,7 @@ public class RequestInfo {
 			return false;
 		if (getClass() != obj.getClass())
 			return false;
-		RequestInfo other = (RequestInfo) obj;
+		CameraConfiguration other = (CameraConfiguration) obj;
 		if (basePath == null) {
 			if (other.basePath != null)
 				return false;
