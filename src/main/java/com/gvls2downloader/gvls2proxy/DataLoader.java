@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -25,6 +24,8 @@ import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
+import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.params.HttpParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +40,7 @@ import org.slf4j.LoggerFactory;
 public class DataLoader {
 	private static Logger log = LoggerFactory.getLogger(DataLoader.class);
 	
-    private static Map<CameraConfiguration, DataLoader> dataLoaders = new HashMap<>();
+    private static final Map<CameraConfiguration, DataLoader> dataLoaders = new HashMap<>();
     
     private DataLoaderThread dataLoaderThread;
     /**
@@ -49,7 +50,7 @@ public class DataLoader {
     /**
      * List of callbacks to notify on each received batch of data
      */
-    private List<IDataLoaderCallback> dataLoaderCallbacks = new ArrayList<>();
+    private final List<IDataLoaderCallback> dataLoaderCallbacks = new ArrayList<>();
     /**
      * File used for local storage of streaming data
      */
@@ -104,11 +105,14 @@ public class DataLoader {
     private void executeRequest() throws IOException {
         final Boolean[] isRunning = new Boolean[] { true };
         try {
+            log.info("Initiating request to: " + requestInfo);
             SchemeRegistry schemeRegistry = new SchemeRegistry();
             schemeRegistry.register(new Scheme("http", 80, PlainSocketFactory.getSocketFactory()));
             ClientConnectionManager cm = new PoolingClientConnectionManager(schemeRegistry);
 
             final DefaultHttpClient httpClient = new DefaultHttpClient(cm);
+            HttpConnectionParams.setConnectionTimeout(httpClient.getParams(), 60000);
+            HttpConnectionParams.setSoTimeout(httpClient.getParams(), 10000);
             
             final String user = this.requestInfo.getUserID();
             final String password = this.requestInfo.getPassword();
@@ -124,6 +128,8 @@ public class DataLoader {
             InputStream is = response.getEntity().getContent();
             writeStreamToFile(is, "authentication.txt");
 
+            log.info("Authenticated (" + requestInfo + ")");
+            
             // 2. Send Hello
             httpGet = new HttpGet("http://" + hostAndPort + basePath + "cgi-bin/hello.cgi");
             response = httpClient.execute(httpGet);
@@ -145,7 +151,7 @@ public class DataLoader {
                         try {
                             HttpGet httpGet = new HttpGet("http://" + hostAndPort + basePath + "php/session_continue.php");
                             HttpResponse response = httpClient.execute(httpGet);
-                            log.info("Headers from session continuation:");
+                            log.info("Continuing session for server: " + hostAndPort);
                             InputStream is = response.getEntity().getContent();
                             writeStreamToFile(is, "session_continue.txt");
                         } catch (Throwable t) {
@@ -167,9 +173,10 @@ public class DataLoader {
                 httpGet = new HttpGet("http://" + hostAndPort + basePath + "cgi-bin/movie_sp.cgi");
                 response = httpClient.execute(httpGet);
                 is = response.getEntity().getContent();
+                log.info("Stream download in progress... (" + requestInfo + ")");
                 writeStreamToOutput(is);
             } catch (Exception e) {
-                log.info("Error transferring stream... shutting down thread!");
+                log.info("Error transferring stream... shutting down thread! (" + requestInfo + ")");
             }
 
             // 5. Disconnect session
@@ -189,7 +196,7 @@ public class DataLoader {
                 try {
                     executeRequest();
                 } catch (Throwable t) {
-                	log.debug("Camera connection failure", t);
+                	log.debug("Camera connection failure (" + requestInfo + ")", t);
                 }
                 
                 // If we have reached here, the connection has failed.
@@ -200,7 +207,7 @@ public class DataLoader {
                 // less than 30 seconds (to prevent two connections from occurring at
                 // the same time), so wait 31 seconds and try again.
                 Date retryTime = new Date(System.currentTimeMillis() + (1000L * 31L));
-                log.error("Request failed. Waiting for 31 seconds, and then will retry at: " + retryTime);
+                log.error("(" + requestInfo + ") Request failed. Waiting for 31 seconds, and then will retry at: " + retryTime);
                 try {
                     Thread.sleep(31000);
                 } catch (Exception e) {
@@ -232,7 +239,6 @@ public class DataLoader {
     
     private static void writeStreamToFile(InputStream is, String filename) throws IOException {
         File file = new File(filename);
-        log.info("Writing data to: " + file.getAbsolutePath());
         FileOutputStream fos = new FileOutputStream(file);
         byte[] buffer = new byte[32768];
 
