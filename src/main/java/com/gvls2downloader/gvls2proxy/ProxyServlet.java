@@ -59,10 +59,10 @@ public class ProxyServlet extends HttpServlet {
                 Thread.sleep(50L);
             } catch (Exception e) {
                 isRunning[0] = false;
-                dataLoader.removeCallback(callback);
                 break;
             }
         }
+        dataLoader.removeCallback(callback);
     }
 
     private CameraConfiguration getRequestInfo(HttpServletRequest req) {

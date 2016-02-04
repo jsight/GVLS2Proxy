@@ -94,12 +94,16 @@ public class DataLoader {
         log.info("Filename is: " + streamingOutputFile.getAbsolutePath() + " (for stream request: " + requestInfo + ")");
     }
     
-    public synchronized void addCallback(IDataLoaderCallback callback) {
-        this.dataLoaderCallbacks.add(callback);
+    public void addCallback(IDataLoaderCallback callback) {
+        synchronized (this.dataLoaderCallbacks) {
+            this.dataLoaderCallbacks.add(callback);
+        }
     }
     
-    public synchronized void removeCallback(IDataLoaderCallback callback) {
-        this.dataLoaderCallbacks.remove(callback);
+    public void removeCallback(IDataLoaderCallback callback) {
+        synchronized (this.dataLoaderCallbacks) {
+            this.dataLoaderCallbacks.remove(callback);
+        }
     }
     
     private void executeRequest() throws IOException {
@@ -227,9 +231,19 @@ public class DataLoader {
                 byte[] dataReceivedArray = new byte[bytesRead];
                 System.arraycopy(buffer, 0, dataReceivedArray, 0, bytesRead);
                 fos.write(dataReceivedArray);
-                for (IDataLoaderCallback cb : this.dataLoaderCallbacks) {
-                    cb.dataReceived(dataReceivedArray);
+
+                ArrayList<IDataLoaderCallback> loaderCallbacks;
+                synchronized (this.dataLoaderCallbacks) {
+                    loaderCallbacks = new ArrayList<>(this.dataLoaderCallbacks);
                 }
+                for (IDataLoaderCallback cb : loaderCallbacks) {
+                    try {
+                        cb.dataReceived(dataReceivedArray);
+                    } catch (Throwable t) {
+                        System.err.println("Error sending data to: " + cb + " due to: " + t.getMessage() + "; Ignoring...");
+                    }
+                }
+
             }
             is.close();
         } finally {
