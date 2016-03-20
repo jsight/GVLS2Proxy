@@ -1,9 +1,6 @@
 package com.gvls2downloader.gvls2proxy;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -11,6 +8,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
@@ -108,6 +108,8 @@ public class DataLoader {
     
     private void executeRequest() throws IOException {
         final Boolean[] isRunning = new Boolean[] { true };
+        final IDataLoaderCallback writeToFileCallback = new TSFileDiskCallback();
+        addCallback(writeToFileCallback);
         try {
             log.info("Initiating request to: " + requestInfo);
             SchemeRegistry schemeRegistry = new SchemeRegistry();
@@ -190,6 +192,7 @@ public class DataLoader {
             writeStreamToFile(is, "session_complete.txt");
         } finally {
             isRunning[0] = false;
+            removeCallback(writeToFileCallback);
         }
     }
 
@@ -221,34 +224,64 @@ public class DataLoader {
         }
     }
 
-    private void writeStreamToOutput(InputStream is) throws IOException {
-        FileOutputStream fos = new FileOutputStream(this.streamingOutputFile, true);
-        try {
-            byte[] buffer = new byte[32768];
+    private class TSFileDiskCallback implements IDataLoaderCallback {
+        private FileOutputStream outputStream;
+        final BlockingQueue<byte[]> dataQueue = new ArrayBlockingQueue<>(5000);
 
-            int bytesRead;
-            while ((bytesRead = is.read(buffer)) != -1) {
-                byte[] dataReceivedArray = new byte[bytesRead];
-                System.arraycopy(buffer, 0, dataReceivedArray, 0, bytesRead);
-                fos.write(dataReceivedArray);
-
-                ArrayList<IDataLoaderCallback> loaderCallbacks;
-                synchronized (this.dataLoaderCallbacks) {
-                    loaderCallbacks = new ArrayList<>(this.dataLoaderCallbacks);
-                }
-                for (IDataLoaderCallback cb : loaderCallbacks) {
-                    try {
-                        cb.dataReceived(dataReceivedArray);
-                    } catch (Throwable t) {
-                        System.err.println("Error sending data to: " + cb + " due to: " + t.getMessage() + "; Ignoring...");
+        public TSFileDiskCallback() throws IOException {
+            outputStream = new FileOutputStream(DataLoader.this.streamingOutputFile, true);
+            Thread writerThread = new Thread() {
+                @Override
+                public void run() {
+                    while (outputStream != null) {
+                        try {
+                            byte[] data = dataQueue.poll(1000, TimeUnit.DAYS);
+                            outputStream.write(data);
+                        } catch (Throwable t) {
+                            System.err.println("Failed to write data to: " + DataLoader.this.streamingOutputFile + " due to: " + t.getMessage());
+                        }
                     }
                 }
-
-            }
-            is.close();
-        } finally {
-            fos.close();
+            };
+            writerThread.setName("TSWriter");
+            writerThread.start();
         }
+
+        @Override
+        public void dataReceived(byte[] data) {
+            dataQueue.offer(data);
+        }
+
+        public void close() throws IOException {
+            OutputStream os = outputStream;
+            outputStream = null;
+            os.close();
+        }
+    }
+
+    private void writeStreamToOutput(InputStream is) throws IOException {
+        byte[] buffer = new byte[32768];
+
+        int bytesRead;
+        while ((bytesRead = is.read(buffer)) != -1) {
+            byte[] dataReceivedArray = new byte[bytesRead];
+            System.arraycopy(buffer, 0, dataReceivedArray, 0, bytesRead);
+
+
+            ArrayList<IDataLoaderCallback> loaderCallbacks;
+            synchronized (this.dataLoaderCallbacks) {
+                loaderCallbacks = new ArrayList<>(this.dataLoaderCallbacks);
+            }
+            for (IDataLoaderCallback cb : loaderCallbacks) {
+                try {
+                    cb.dataReceived(dataReceivedArray);
+                } catch (Throwable t) {
+                    System.err.println("Error sending data to: " + cb + " due to: " + t.getMessage() + "; Ignoring...");
+                }
+            }
+
+        }
+        is.close();
     }
     
     private static void writeStreamToFile(InputStream is, String filename) throws IOException {

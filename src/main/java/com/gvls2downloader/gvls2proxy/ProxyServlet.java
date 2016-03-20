@@ -1,6 +1,9 @@
 package com.gvls2downloader.gvls2proxy;
 
 import java.io.IOException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -37,26 +40,38 @@ public class ProxyServlet extends HttpServlet {
         
     	final CameraConfiguration requestInfo = getRequestInfo(req);
     	log.info("Received request for the following stream: " + requestInfo + " from: " + req.getRemoteAddr());
+        final BlockingQueue<byte[]> dataQueue = new ArrayBlockingQueue<>(1000);
     	
         final Boolean[] isRunning = new Boolean[] { true };
         final DataLoader dataLoader = DataLoader.getInstance(requestInfo, true);
         
         resp.setContentType("video/mpeg");
-        final IDataLoaderCallback callback = new IDataLoaderCallback() {
-            @Override
-            public void dataReceived(byte[] bytes) {
-                try {
-                    resp.getOutputStream().write(bytes);
-                } catch (Throwable e) {
-                    isRunning[0] = false;
-                }
+        final IDataLoaderCallback callback = (data) -> {
+            try {
+                dataQueue.offer(data);
+            } catch (Throwable e) {
+                isRunning[0] = false;
             }
         };
         dataLoader.addCallback(callback);
-        
+
+        //DataMonitor dataMonitor = new DataMonitor();
+
+        String remoteIP = req.getRemoteAddr();
+        //long lastReportTime = System.currentTimeMillis();
         while (isRunning[0]) {
             try {
-                Thread.sleep(50L);
+                byte[] data = dataQueue.poll(1000, TimeUnit.DAYS);
+
+                //long start = System.currentTimeMillis();
+                resp.getOutputStream().write(data);
+                //long end = System.currentTimeMillis();
+                //dataMonitor.addSample(data.length, start, end);
+
+                //if ((System.currentTimeMillis() - lastReportTime) > (1000L * 30L)) {
+                    //lastReportTime = System.currentTimeMillis();
+                    //System.out.println("Speed for " + remoteIP + ": " + dataMonitor.getAverageRate());
+                //}
             } catch (Exception e) {
                 isRunning[0] = false;
                 break;
