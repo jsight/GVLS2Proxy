@@ -37,7 +37,7 @@ public class DataLoader {
     private String password;
     private List<IDataLoaderCallback> dataLoaderCallbacks = new ArrayList<IDataLoaderCallback>();
     private File streamingOutputFile;
-    
+
     public static DataLoader getInstance() {
         return instance;
     }
@@ -66,21 +66,21 @@ public class DataLoader {
         if (!streamingFolder.exists()) {
             streamingFolder.mkdirs();
         }
-        
+
         final DateFormat df = new SimpleDateFormat("yyyyMMdd_HHmmss");
         String dateStr = df.format(new Date());
         this.streamingOutputFile = new File(streamingFolder, "mpegstream_" + dateStr + ".ts");
         System.out.println("Filename is: " + streamingOutputFile.getAbsolutePath());
     }
-    
+
     public synchronized void addCallback(IDataLoaderCallback callback) {
         this.dataLoaderCallbacks.add(callback);
     }
-    
+
     public synchronized void removeCallback(IDataLoaderCallback callback) {
         this.dataLoaderCallbacks.remove(callback);
     }
-    
+
     private void executeRequest() throws IOException {
         final Boolean[] isRunning = new Boolean[] { true };
         try {
@@ -199,7 +199,7 @@ public class DataLoader {
         System.out.println();
         System.out.println();
     }
-    
+
     private void writeStreamToOutput(InputStream is) throws IOException {
         FileOutputStream fos = new FileOutputStream(this.streamingOutputFile, true);
         try {
@@ -214,12 +214,13 @@ public class DataLoader {
                     cb.dataReceived(dataReceivedArray);
                 }
             }
+            fos.flush();
             is.close();
         } finally {
             fos.close();
         }
     }
-    
+
     private static void writeStreamToFile(InputStream is, String filename) throws IOException {
         File file = new File(filename);
         System.out.println("Writing to: " + file.getAbsolutePath());

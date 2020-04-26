@@ -43,29 +43,30 @@ public class ProxyServlet extends HttpServlet {
         System.out.println("-----------------------------------------------");
         System.out.println("-----------------------------------------------");
     }
-    
+
     protected void processRequest(final HttpServletRequest req, final HttpServletResponse resp)
             throws ServletException, IOException {
-        
+
         final Boolean[] isRunning = new Boolean[] { true };
-        
+
         final DataLoader dataLoader = DataLoader.getInstance();
-        
+
         resp.setContentType("video/mpeg");
         final IDataLoaderCallback callback = new IDataLoaderCallback() {
             @Override
             public void dataReceived(byte[] bytes) {
                 try {
                     resp.getOutputStream().write(bytes);
+                    resp.getOutputStream().flush();
                 } catch (Throwable e) {
                     isRunning[0] = false;
                 } finally {
-                    dataLoader.removeCallback(this);
+                    //dataLoader.removeCallback(this);
                 }
             }
         };
         dataLoader.addCallback(callback);
-        
+
         synchronized (dataLoader) {
             String ipParam = req.getParameter(KEY_IP);
             if (ipParam == null || ipParam.trim().equals("")) {
@@ -84,7 +85,7 @@ public class ProxyServlet extends HttpServlet {
             }
             dataLoader.init(ip, user, pw);
         }
-        
+
         while (isRunning[0]) {
             try {
                 Thread.sleep(1000L);
